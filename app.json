@@ -1,0 +1,34 @@
+{
+  "expo": {
+    "name": "KNUST Pathfinder",
+    "slug": "knust-pathfinder",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/images/icon.png",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "image": "./assets/images/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#006633"
+    },
+    "assetBundlePatterns": ["**/*"],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.knust.pathfinder"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/images/adaptive-icon.png",
+        "backgroundColor": "#006633"
+      },
+      "package": "com.knust.pathfinder"
+    },
+    "web": {
+      "favicon": "./assets/images/favicon.png"
+    },
+    "extra": {
+      "apiBaseUrl": "https://knust-chat-bot-backend.onrender.com"
+    },
+    "scheme": "knust-pathfinder"
+  }
+}

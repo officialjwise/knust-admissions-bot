@@ -1,7 +1,17 @@
 import * as React from "react"
-import { useState } from "react"
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, StatusBar, TextInput } from "react-native"
+import { useState, useEffect } from "react"
+import {
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  TouchableOpacity,
+  SafeAreaView,
+  StatusBar,
+  TextInput,
+} from "react-native"
 import { MaterialIcons } from "@expo/vector-icons"
+import * as SecureStore from "expo-secure-store"
 
 import type { StackNavigationProp } from "@react-navigation/stack"
 
@@ -12,6 +22,9 @@ type FAQScreenProps = {
 const FAQScreen = ({ navigation }: FAQScreenProps) => {
   const [searchQuery, setSearchQuery] = useState("")
   const [expandedItems, setExpandedItems] = useState<ExpandedItems>({})
+  const [faqs, setFaqs] = useState<FAQItem[]>([])
+  const [error, setError] = useState<string | null>(null)
+  const [isLoading, setIsLoading] = useState(true)
 
   const faqCategories: FAQCategory[] = [
     {
@@ -40,96 +53,6 @@ const FAQScreen = ({ navigation }: FAQScreenProps) => {
     },
   ]
 
-  const faqData = [
-    {
-      id: 1,
-      category: "admission",
-      question: "What are the admission requirements for KNUST?",
-      answer:
-        "General admission requirements include:\n\n• WASSCE certificate with at least 6 subjects\n• Core subjects: English Language (A1-C6), Mathematics (A1-C6), Integrated Science (A1-C6), Social Studies (A1-C6)\n• Three elective subjects relevant to your chosen program\n• Aggregate score between 6-36 depending on the program\n• Some programs may require additional entrance exams",
-    },
-    {
-      id: 2,
-      category: "admission",
-      question: "When is the application deadline?",
-      answer:
-        "The application deadline for the 2024/2025 academic year has been extended to March 31st, 2025. Late applications may be considered on a case-by-case basis, but it's recommended to apply before the deadline.",
-    },
-    {
-      id: 3,
-      category: "admission",
-      question: "How do I apply to KNUST?",
-      answer:
-        "You can apply to KNUST through:\n\n1. Online application portal (recommended)\n2. Purchase application forms from KNUST campus\n3. Authorized vendors nationwide\n\nThe online application process includes:\n• Creating an account\n• Filling the application form\n• Uploading required documents\n• Paying the application fee\n• Submitting the application",
-    },
-    {
-      id: 4,
-      category: "fees",
-      question: "What are the tuition fees at KNUST?",
-      answer:
-        "KNUST tuition fees vary by program and stream:\n\n• Regular stream: GHS 2,500 - 4,000 per year\n• Fee-paying stream: GHS 8,000 - 15,000 per year\n• Parallel stream: GHS 12,000 - 20,000 per year\n\nAdditional costs include:\n• Accommodation fees\n• Meal plans\n• Registration fees\n• Laboratory fees (for science programs)\n• Field trip costs",
-    },
-    {
-      id: 5,
-      category: "fees",
-      question: "Are there scholarship opportunities?",
-      answer:
-        "Yes, KNUST offers various scholarship opportunities:\n\n• Merit-based scholarships for top performers\n• Need-based financial aid\n• Government scholarships (GETFUND)\n• Corporate sponsorships\n• International scholarships\n• Sports scholarships\n\nContact the Financial Aid Office for more information and application procedures.",
-    },
-    {
-      id: 6,
-      category: "programs",
-      question: "What programs does KNUST offer?",
-      answer:
-        "KNUST offers undergraduate and postgraduate programs across six colleges:\n\n• College of Engineering\n• College of Science\n• College of Agriculture and Natural Resources\n• College of Architecture and Planning\n• College of Health Sciences\n• College of Humanities and Social Sciences\n\nPrograms include Engineering, Medicine, Agriculture, Business, Arts, and many more.",
-    },
-    {
-      id: 7,
-      category: "programs",
-      question: "Can I change my program after admission?",
-      answer:
-        "Yes, you may be able to change your program under certain conditions:\n\n• Must meet the admission requirements for the new program\n• Change request must be made within the first semester\n• Subject to availability of space in the desired program\n• May require additional documentation\n• Some programs may require entrance exams\n\nContact the Academic Affairs Office for the change of program procedure.",
-    },
-    {
-      id: 8,
-      category: "campus",
-      question: "Is accommodation available on campus?",
-      answer:
-        "Yes, KNUST provides on-campus accommodation in various halls of residence:\n\n• Traditional halls (Unity Hall, University Hall, etc.)\n• New hostels with modern facilities\n• Both male and female halls available\n• Room allocation is competitive\n\nFactors considered for allocation:\n• Academic performance\n• Distance from home\n• Special needs\n• Year of study\n\nOff-campus accommodation is also available in nearby communities.",
-    },
-    {
-      id: 9,
-      category: "campus",
-      question: "What facilities are available on campus?",
-      answer:
-        "KNUST campus offers comprehensive facilities:\n\n• Modern lecture halls and laboratories\n• Central and departmental libraries\n• Sports complex and gymnasium\n• Health center and clinic\n• Banking services\n• Restaurants and cafeterias\n• Shopping centers\n• Transportation services\n• Internet and Wi-Fi access\n• Recreation centers",
-    },
-    {
-      id: 10,
-      category: "campus",
-      question: "What student organizations can I join?",
-      answer:
-        "KNUST has numerous student organizations:\n\n• Student Representative Council (SRC)\n• Hall committees\n• Academic and professional societies\n• Religious organizations\n• Sports clubs and teams\n• Cultural groups\n• Volunteer organizations\n• Debate societies\n• Drama and music groups\n\nThese organizations provide opportunities for leadership, networking, and personal development.",
-    },
-  ]
-
-  const filteredFAQs = faqData.filter(
-    (faq) =>
-      faq.question.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      faq.answer.toLowerCase().includes(searchQuery.toLowerCase()),
-  )
-
-  interface ExpandedItems {
-    [id: number]: boolean
-  }
-
-  const toggleExpanded = (id: number) => {
-    setExpandedItems((prev: ExpandedItems) => ({
-      ...prev,
-      [id]: !prev[id],
-    }))
-  }
-
   interface FAQCategory {
     id: string
     title: string
@@ -144,13 +67,101 @@ const FAQScreen = ({ navigation }: FAQScreenProps) => {
     answer: string
   }
 
+  interface ExpandedItems {
+    [id: number]: boolean
+  }
+
+  // Fetch FAQs from API on component mount
+  useEffect(() => {
+    const fetchFAQs = async () => {
+      setIsLoading(true)
+      setError(null)
+
+      const token = await SecureStore.getItemAsync("idToken")
+      if (!token) {
+        setError("Authentication error: No token found. Please log in again.")
+        setIsLoading(false)
+        return
+      }
+
+      try {
+        const response = await fetch("https://knust-chat-bot-backend.onrender.com/faqs", {
+          method: "GET",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${token}`,
+          },
+        })
+
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}))
+          if (response.status === 401) {
+            throw new Error("Authentication failed: Please log in again.")
+          }
+          throw new Error(errorData.error || `HTTP error! status: ${response.status}`)
+        }
+
+        const apiFaqs = await response.json()
+        // Map API data to match FAQItem interface, assigning categories based on content
+        const mappedFaqs: FAQItem[] = apiFaqs.map((faq: any, index: number) => {
+          let category = "admission" // Default category
+          const questionLower = faq.question.toLowerCase()
+          const answerLower = faq.answer.toLowerCase()
+          if (questionLower.includes("fee") || questionLower.includes("payment") || answerLower.includes("fee")) {
+            category = "fees"
+          } else if (
+            questionLower.includes("program") ||
+            questionLower.includes("course") ||
+            answerLower.includes("program")
+          ) {
+            category = "programs"
+          } else if (
+            questionLower.includes("campus") ||
+            questionLower.includes("accommodation") ||
+            answerLower.includes("campus")
+          ) {
+            category = "campus"
+          }
+          return {
+            id: parseInt(faq.id, 10) || index + 1, 
+            category,
+            question: faq.question,
+            answer: faq.answer,
+          }
+        })
+        setFaqs(mappedFaqs)
+      } catch (err: any) {
+        console.error("Error fetching FAQs:", err)
+        setError(
+          err.message === "Authentication failed: Please log in again."
+            ? "Authentication error: Please log in again or contact support."
+            : "Failed to load FAQs. Please try again later."
+        )
+      } finally {
+        setIsLoading(false)
+      }
+    }
+
+    fetchFAQs()
+  }, [])
+
+  const filteredFAQs = faqs.filter(
+    (faq) =>
+      faq.question.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      faq.answer.toLowerCase().includes(searchQuery.toLowerCase())
+  )
+
+  const toggleExpanded = (id: number) => {
+    setExpandedItems((prev: ExpandedItems) => ({
+      ...prev,
+      [id]: !prev[id],
+    }))
+  }
+
   const filterByCategory = (categoryId: string): FAQItem[] => {
     return filteredFAQs.filter((faq: FAQItem) => faq.category === categoryId)
   }
 
-  interface RenderCategoryCardProps {
-    category: FAQCategory
-  }
   interface RenderCategoryCardProps {
     category: FAQCategory
   }
@@ -229,41 +240,65 @@ const FAQScreen = ({ navigation }: FAQScreenProps) => {
           </View>
         </View>
 
-        {searchQuery === "" && (
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Browse by Category</Text>
-            <View style={styles.categoriesGrid}>{faqCategories.map(renderCategoryCard)}</View>
+        {isLoading ? (
+          <View style={styles.loadingContainer}>
+            <Text style={styles.loadingText}>Loading FAQs...</Text>
           </View>
-        )}
-
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>
-            {searchQuery ? `Search Results (${filteredFAQs.length})` : "All Questions"}
-          </Text>
-
-          {filteredFAQs.length === 0 ? (
-            <View style={styles.noResults}>
-              <MaterialIcons name="search-off" size={48} color="#9CA3AF" />
-              <Text style={styles.noResultsText}>No questions found</Text>
-              <Text style={styles.noResultsSubtext}>Try adjusting your search terms or browse by category</Text>
-            </View>
-          ) : (
-            <View style={styles.faqList}>{filteredFAQs.map(renderFAQItem)}</View>
-          )}
-        </View>
-
-        <View style={styles.section}>
-          <View style={styles.supportCard}>
-            <MaterialIcons name="support-agent" size={48} color="#006633" />
-            <Text style={styles.supportTitle}>Still have questions?</Text>
-            <Text style={styles.supportDescription}>
-              Can't find what you're looking for? Our AI assistant is here to help with personalized answers.
-            </Text>
-            <TouchableOpacity style={styles.supportButton} onPress={() => navigation.navigate("Chat")}>
-              <Text style={styles.supportButtonText}>Chat with Assistant</Text>
+        ) : error ? (
+          <View style={styles.errorContainer}>
+            <MaterialIcons name="error-outline" size={48} color="#EF4444" />
+            <Text style={styles.errorText}>{error}</Text>
+            <TouchableOpacity
+              style={styles.retryButton}
+              onPress={() => {
+                setIsLoading(true)
+                setError(null)
+                // Trigger re-fetch by resetting faqs and calling useEffect again
+                setFaqs([])
+              }}
+            >
+              <Text style={styles.retryButtonText}>Retry</Text>
             </TouchableOpacity>
           </View>
-        </View>
+        ) : (
+          <>
+            {searchQuery === "" && (
+              <View style={styles.section}>
+                <Text style={styles.sectionTitle}>Browse by Category</Text>
+                <View style={styles.categoriesGrid}>{faqCategories.map(renderCategoryCard)}</View>
+              </View>
+            )}
+
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>
+                {searchQuery ? `Search Results (${filteredFAQs.length})` : "All Questions"}
+              </Text>
+
+              {filteredFAQs.length === 0 ? (
+                <View style={styles.noResults}>
+                  <MaterialIcons name="search-off" size={48} color="#9CA3AF" />
+                  <Text style={styles.noResultsText}>No questions found</Text>
+                  <Text style={styles.noResultsSubtext}>Try adjusting your search terms or browse by category</Text>
+                </View>
+              ) : (
+                <View style={styles.faqList}>{filteredFAQs.map(renderFAQItem)}</View>
+              )}
+            </View>
+
+            <View style={styles.section}>
+              <View style={styles.supportCard}>
+                <MaterialIcons name="support-agent" size={48} color="#006633" />
+                <Text style={styles.supportTitle}>Still have questions?</Text>
+                <Text style={styles.supportDescription}>
+                  Can't find what you're looking for? Our AI assistant is here to help with personalized answers.
+                </Text>
+                <TouchableOpacity style={styles.supportButton} onPress={() => navigation.navigate("Chat")}>
+                  <Text style={styles.supportButtonText}>Chat with Assistant</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </>
+        )}
       </ScrollView>
     </SafeAreaView>
   )
@@ -443,6 +478,36 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   supportButtonText: {
+    color: "#FFFFFF",
+    fontSize: 14,
+    fontWeight: "600",
+  },
+  loadingContainer: {
+    alignItems: "center",
+    paddingVertical: 40,
+  },
+  loadingText: {
+    fontSize: 16,
+    color: "#6B7280",
+  },
+  errorContainer: {
+    alignItems: "center",
+    paddingVertical: 40,
+  },
+  errorText: {
+    fontSize: 16,
+    color: "#EF4444",
+    marginTop: 16,
+    textAlign: "center",
+  },
+  retryButton: {
+    backgroundColor: "#006633",
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 8,
+    marginTop: 16,
+  },
+  retryButtonText: {
     color: "#FFFFFF",
     fontSize: 14,
     fontWeight: "600",

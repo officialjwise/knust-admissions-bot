@@ -1,6 +1,15 @@
 import type React from "react"
-import { useState, useEffect } from "react"
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, StatusBar, Alert } from "react-native"
+import { useState, useEffect, useRef } from "react"
+import {
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  TouchableOpacity,
+  SafeAreaView,
+  StatusBar,
+  Alert,
+} from "react-native"
 import AsyncStorage from "@react-native-async-storage/async-storage"
 import { MaterialIcons } from "@expo/vector-icons"
 import { useNavigation, useRoute } from "@react-navigation/native"
@@ -22,7 +31,8 @@ const WassceInputScreen: React.FC<WassceInputScreenProps> = () => {
   const { selectedCourse = "general-science" } = route.params || {}
 
   const [results, setResults] = useState<{ [key: string]: string }>({})
-  const [isDropdownOpen, setIsDropdownOpen] = useState(false)
+  const [openDropdown, setOpenDropdown] = useState<string | null>(null)
+  const scrollViewRef = useRef<ScrollView>(null)
 
   const coreSubjects = ["Mathematics (Core)", "English Language", "Integrated Science", "Social Studies"]
 
@@ -86,6 +96,7 @@ const WassceInputScreen: React.FC<WassceInputScreenProps> = () => {
       ...prev,
       [subject]: grade,
     }))
+    setOpenDropdown(null)
   }
 
   const clearForm = () => {
@@ -152,28 +163,36 @@ const WassceInputScreen: React.FC<WassceInputScreenProps> = () => {
           </View>
 
           <View style={styles.gradeSelector}>
-            <TouchableOpacity style={styles.dropdownButton} onPress={() => setIsDropdownOpen(!isDropdownOpen)}>
+            <TouchableOpacity
+              style={styles.dropdownButton}
+              onPress={() => setOpenDropdown(openDropdown === subject ? null : subject)}
+              accessibilityLabel={`Select grade for ${subject}`}
+              accessibilityRole="button"
+            >
               <Text style={[styles.dropdownButtonText, !results[subject] && styles.placeholderText]}>
                 {results[subject] || "Select Grade"}
               </Text>
               <MaterialIcons
-                name={isDropdownOpen ? "keyboard-arrow-up" : "keyboard-arrow-down"}
+                name={openDropdown === subject ? "keyboard-arrow-up" : "keyboard-arrow-down"}
                 size={20}
                 color="#6B7280"
               />
             </TouchableOpacity>
 
-            {isDropdownOpen && (
+            {openDropdown === subject && (
               <View style={styles.dropdownMenu}>
-                <ScrollView style={styles.dropdownScroll} nestedScrollEnabled={true}>
+                <ScrollView
+                  style={styles.dropdownScroll}
+                  nestedScrollEnabled={true}
+                  showsVerticalScrollIndicator={true}
+                >
                   {grades.map((grade) => (
                     <TouchableOpacity
                       key={grade}
                       style={[styles.dropdownItem, results[subject] === grade && styles.selectedDropdownItem]}
-                      onPress={() => {
-                        handleGradeChange(subject, grade)
-                        setIsDropdownOpen(false)
-                      }}
+                      onPress={() => handleGradeChange(subject, grade)}
+                      accessibilityLabel={`Select ${grade} for ${subject}`}
+                      accessibilityRole="menuitem"
                     >
                       <Text
                         style={[styles.dropdownItemText, results[subject] === grade && styles.selectedDropdownItemText]}
@@ -196,7 +215,6 @@ const WassceInputScreen: React.FC<WassceInputScreenProps> = () => {
     <SafeAreaView style={styles.container}>
       <StatusBar backgroundColor="#006633" barStyle="light-content" />
 
-      {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
           <MaterialIcons name="arrow-back" size={24} color="#FFFFFF" />
@@ -210,7 +228,6 @@ const WassceInputScreen: React.FC<WassceInputScreenProps> = () => {
         </View>
       </View>
 
-      {/* Instructions */}
       <View style={styles.instructionsContainer}>
         <View style={styles.instructionsContent}>
           <View style={styles.instructionsText}>
@@ -227,8 +244,12 @@ const WassceInputScreen: React.FC<WassceInputScreenProps> = () => {
         </View>
       </View>
 
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-        {/* Core Subjects Section */}
+      <ScrollView
+        ref={scrollViewRef}
+        style={styles.content}
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.contentContainer}
+      >
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>CORE SUBJECTS</Text>
           <View style={styles.subjectsContainer}>
@@ -236,7 +257,6 @@ const WassceInputScreen: React.FC<WassceInputScreenProps> = () => {
           </View>
         </View>
 
-        {/* Elective Subjects Section */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>ELECTIVE SUBJECTS</Text>
           <View style={styles.subjectsContainer}>
@@ -250,7 +270,6 @@ const WassceInputScreen: React.FC<WassceInputScreenProps> = () => {
           </View>
         </View>
 
-        {/* Progress Indicator */}
         <View style={styles.progressContainer}>
           <Text style={styles.progressText}>
             {Object.keys(results).length} of {getSubjectsForCourse().length} subjects entered
@@ -266,7 +285,6 @@ const WassceInputScreen: React.FC<WassceInputScreenProps> = () => {
         </View>
       </ScrollView>
 
-      {/* Action Buttons */}
       <View style={styles.actionContainer}>
         <TouchableOpacity
           onPress={handleGetRecommendations}
@@ -373,6 +391,9 @@ const styles = StyleSheet.create({
   content: {
     flex: 1,
   },
+  contentContainer: {
+    paddingBottom: 16,
+  },
   section: {
     paddingHorizontal: 16,
     paddingVertical: 16,
@@ -424,8 +445,6 @@ const styles = StyleSheet.create({
   },
   gradeSelector: {
     width: 120,
-    position: "relative",
-    zIndex: 1000,
   },
   dropdownButton: {
     flexDirection: "row",
@@ -448,27 +467,20 @@ const styles = StyleSheet.create({
     color: "#9CA3AF",
   },
   dropdownMenu: {
-    position: "absolute",
-    top: 46,
-    left: 0,
-    right: 0,
     backgroundColor: "#FFFFFF",
     borderWidth: 1,
     borderColor: "#D1D5DB",
     borderRadius: 8,
-    maxHeight: 200,
+    marginTop: 4,
+    maxHeight: 150, // Reduced to ensure visibility on smaller screens
     shadowColor: "#000",
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
+    shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 5,
-    zIndex: 1001,
   },
   dropdownScroll: {
-    maxHeight: 200,
+    maxHeight: 150,
   },
   dropdownItem: {
     flexDirection: "row",

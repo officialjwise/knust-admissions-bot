@@ -36,6 +36,7 @@ const SignInScreen: React.FC<SignInScreenProps> = () => {
   const { onAuthChange } = route.params || {}
 
   const API_BASE_URL = Constants.expoConfig?.extra?.apiBaseUrl || "https://knust-chat-bot-backend.onrender.com"
+  const FIREBASE_API_KEY = "AIzaSyBa3Ht1TcWCrUSsN5o3mGhGTVPjjz-8KJU"
 
   const validateForm = () => {
     const newErrors: Record<string, string> = {}
@@ -64,14 +65,14 @@ const SignInScreen: React.FC<SignInScreenProps> = () => {
     try {
       // For demo purposes, allow demo credentials to work offline
       if (formData.email === "demo@knust.edu.gh" && formData.password === "demo123") {
-        // Store demo credentials
         try {
           await SecureStore.setItemAsync("idToken", "demo-token")
+          await SecureStore.setItemAsync("refreshToken", "demo-refresh-token")
           await SecureStore.setItemAsync("userEmail", formData.email)
           await SecureStore.setItemAsync("userUid", "demo-uid")
         } catch (secureStoreError) {
-          // Fallback to AsyncStorage
           await AsyncStorage.setItem("idToken", "demo-token")
+          await AsyncStorage.setItem("refreshToken", "demo-refresh-token")
           await AsyncStorage.setItem("userEmail", formData.email)
           await AsyncStorage.setItem("userUid", "demo-uid")
         }
@@ -82,9 +83,9 @@ const SignInScreen: React.FC<SignInScreenProps> = () => {
         return
       }
 
-      // Try to connect to backend (skip Firebase for now in Expo Go)
+      // Step 1: Sign in with backend to get custom token
       console.log("Attempting to sign in with URL:", `${API_BASE_URL}/signin`)
-      const response = await fetch(`${API_BASE_URL}/signin`, {
+      const signInResponse = await fetch(`${API_BASE_URL}/signin`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -95,21 +96,58 @@ const SignInScreen: React.FC<SignInScreenProps> = () => {
         }),
       })
 
-      const data = await response.json()
+      const signInData = await signInResponse.json()
 
-      if (!response.ok) {
-        throw new Error(data.error || `Sign in failed: ${response.status} ${response.statusText}`)
+      if (!signInResponse.ok) {
+        throw new Error(signInData.error || `Sign in failed: ${signInResponse.status} ${signInResponse.statusText}`)
       }
 
-      // Store authentication data without Firebase for Expo Go
+      const customToken = signInData.customToken
+      const userId = signInData.uid
+
+      if (!customToken) {
+        throw new Error("No custom token received from server")
+      }
+
+      // Step 2: Exchange custom token for Firebase ID token
+      console.log("Exchanging custom token with Firebase")
+      const firebaseResponse = await fetch(
+        `https://identitytoolkit.googleapis.com/v1/accounts:signInWithCustomToken?key=${FIREBASE_API_KEY}`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            token: customToken,
+            returnSecureToken: true,
+          }),
+        }
+      )
+
+      const firebaseData = await firebaseResponse.json()
+      console.log(firebaseData)
+
+      if (!firebaseResponse.ok) {
+        throw new Error(firebaseData.error?.message || `Firebase authentication failed: ${firebaseResponse.status}`)
+      }
+
+      const { idToken, refreshToken } = firebaseData
+      if (!idToken || !refreshToken ) {
+        throw new Error("Incomplete Firebase authentication response")
+      }
+
+      // Store authentication data
       try {
-        await SecureStore.setItemAsync("idToken", data.customToken || "authenticated")
+        await SecureStore.setItemAsync("idToken", idToken)
+        await SecureStore.setItemAsync("refreshToken", refreshToken)
         await SecureStore.setItemAsync("userEmail", formData.email)
-        await SecureStore.setItemAsync("userUid", data.uid || "user-uid")
+        await SecureStore.setItemAsync("userUid", userId)
       } catch (secureStoreError) {
-        await AsyncStorage.setItem("idToken", data.customToken || "authenticated")
+        await AsyncStorage.setItem("idToken", idToken)
+        await AsyncStorage.setItem("refreshToken", refreshToken)
         await AsyncStorage.setItem("userEmail", formData.email)
-        await AsyncStorage.setItem("userUid", data.uid || "user-uid")
+        await AsyncStorage.setItem("userUid", userId)
       }
 
       if (onAuthChange) {
@@ -118,7 +156,6 @@ const SignInScreen: React.FC<SignInScreenProps> = () => {
     } catch (error: any) {
       console.error("Signin error:", error)
 
-      // Show user-friendly error message
       if (error.message.includes("Network request failed") || error.message.includes("timeout")) {
         Alert.alert(
           "Connection Error",
@@ -128,10 +165,11 @@ const SignInScreen: React.FC<SignInScreenProps> = () => {
               text: "Try Demo",
               onPress: () => {
                 setFormData({ email: "demo@knust.edu.gh", password: "demo123" })
+                handleSignIn()
               },
             },
             { text: "OK" },
-          ],
+          ]
         )
       } else {
         Alert.alert("Error", error.message || "Failed to sign in. Please try again.")
@@ -165,7 +203,6 @@ const SignInScreen: React.FC<SignInScreenProps> = () => {
             <Text style={styles.subtitle}>Sign in to continue your KNUST journey</Text>
           </View>
 
-          {/* Demo credentials hint */}
           <View style={styles.demoHint}>
             <Text style={styles.demoHintText}>Demo: demo@knust.edu.gh / demo123</Text>
           </View>

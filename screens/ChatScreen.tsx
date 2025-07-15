@@ -12,6 +12,7 @@ import {
   Platform,
 } from "react-native"
 import { MaterialIcons } from "@expo/vector-icons"
+import * as SecureStore from "expo-secure-store"
 
 import type { StackNavigationProp } from "@react-navigation/stack"
 
@@ -61,49 +62,78 @@ const ChatScreen = ({ navigation }: ChatScreenProps) => {
   const handleSendMessage = async (text: string) => {
     if (!text.trim()) return
 
+    const token = await SecureStore.getItemAsync("idToken")
+    if (!token) {
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: Date.now().toString(),
+          text: "Authentication error: No token found. Please log in again.",
+          sender: "bot",
+          timestamp: new Date(),
+        },
+      ])
+      setIsTyping(false)
+      return
+    }
+
     const userMessage: Message = {
       id: Date.now().toString(),
       text: text.trim(),
       sender: "user",
       timestamp: new Date(),
     }
-
+    const message = text.trim()
     setMessages((prev) => [...prev, userMessage])
     setInputText("")
     setIsTyping(true)
 
-    setTimeout(() => {
+    try {
+      console.log("Sending this message:", message, "Token:", token)
+      const response = await fetch("https://knust-chat-bot-backend.onrender.com/chat", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          message: message,
+          sender: "user",
+        }),
+      })
+      console.log("Response:", response)
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}))
+        if (response.status === 403) {
+          throw new Error("Access denied: Invalid or insufficient token permissions.")
+        }
+        throw new Error(errorData.error || `HTTP error! status: ${response.status}`)
+      }
+
+      const data = await response.json()
       const botResponse: Message = {
         id: (Date.now() + 1).toString(),
-        text: generateBotResponse(text),
+        text: data.response,
         sender: "bot",
         timestamp: new Date(),
       }
       setMessages((prev) => [...prev, botResponse])
+    } catch (error: any) {
+      console.error("Error fetching bot response:", error)
+      const errorMessage: Message = {
+        id: (Date.now() + 1).toString(),
+        text:
+          error.message === "Access denied: Invalid or insufficient token permissions."
+            ? "Authentication error: Please log in again or contact support."
+            : "Sorry, something went wrong. Please try again later.",
+        sender: "bot",
+        timestamp: new Date(),
+      }
+      setMessages((prev) => [...prev, errorMessage])
+    } finally {
       setIsTyping(false)
-    }, 1500)
-  }
-
-  const generateBotResponse = (userText: string) => {
-    const lowerText = userText.toLowerCase()
-
-    if (lowerText.includes("deadline")) {
-      return "The application deadline for KNUST 2024/2025 academic year has been extended to March 31st, 2025. Make sure to submit your application before this date to be considered for admission."
     }
-
-    if (lowerText.includes("tuition") || lowerText.includes("fees")) {
-      return "KNUST tuition fees vary by program and stream:\n\n• Regular stream: GHS 2,500 - 4,000 per year\n• Fee-paying stream: GHS 8,000 - 15,000 per year\n• Parallel stream: GHS 12,000 - 20,000 per year\n\nAdditional costs include accommodation, meals, and other fees."
-    }
-
-    if (lowerText.includes("computer science") || lowerText.includes("cs")) {
-      return "For BSc Computer Science at KNUST, you need:\n\n• Core subjects: A1-C6 in English, Mathematics, Integrated Science\n• Electives: A1-C6 in Physics, Chemistry, and Elective Mathematics\n• Aggregate: 6-15\n\nThis program is available in regular and fee-paying streams."
-    }
-
-    if (lowerText.includes("accommodation") || lowerText.includes("hostel")) {
-      return "KNUST provides on-campus accommodation in various halls of residence. Room allocation is competitive and based on:\n\n• Academic performance\n• Distance from home\n• Special needs\n\nOff-campus accommodation is also available in nearby communities."
-    }
-
-    return "Thank you for your question! I'm here to help with KNUST application inquiries. You can ask me about admission requirements, deadlines, fees, programs, or any other application-related questions. Is there something specific you'd like to know?"
   }
 
   const handleQuickQuestion = (question: string) => {
@@ -159,7 +189,6 @@ const ChatScreen = ({ navigation }: ChatScreenProps) => {
     )
   }
 
-  // Typing indicator for the bot
   const renderTypingIndicator = () => (
     <View style={[styles.messageContainer, styles.botMessageContainer]}>
       <View style={styles.botAvatar}>

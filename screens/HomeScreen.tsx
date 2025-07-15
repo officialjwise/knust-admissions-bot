@@ -19,6 +19,8 @@ type RootStackParamList = {
   Programs: undefined;
   FAQ: undefined;
   Profile: undefined;
+  ProgramRecommendations: undefined
+  WassceInput: undefined
 }
 
 const { width } = Dimensions.get("window")
@@ -71,7 +73,7 @@ const HomeScreen = ({ onLogout }: { onLogout: () => void }) => {
       description: "Discover courses",
       icon: "school",
       color: "#FFC107",
-      onPress: () => navigation.navigate("Programs"),
+      onPress: () => navigation.navigate("WassceInput"),
     },
     {
       id: 3,

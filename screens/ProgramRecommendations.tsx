@@ -1,56 +1,23 @@
-import React, { useState } from "react"
+import React, { useState, useEffect } from "react"
 import type { ReactElement } from "react"
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, StatusBar, Alert } from "react-native"
+import {
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  TouchableOpacity,
+  SafeAreaView,
+  StatusBar,
+  Alert,
+} from "react-native"
 import { MaterialIcons } from "@expo/vector-icons"
 import AsyncStorage from "@react-native-async-storage/async-storage"
-
-const samplePrograms = [
-  {
-    id: 1,
-    name: "Computer Science",
-    faculty: "Faculty of Computing and Information Systems",
-    admissionChance: "High",
-    duration: "4 years",
-    type: "Regular",
-    requirements: "A1-C6 in Math (Core & Elective), Physics, Chemistry",
-    description: "Study software development, algorithms, and computer systems.",
-  },
-  {
-    id: 2,
-    name: "Electrical Engineering",
-    faculty: "College of Engineering",
-    admissionChance: "Medium",
-    duration: "4 years",
-    type: "Fee-Paying",
-    requirements: "A1-C6 in Math (Core & Elective), Physics, Chemistry",
-    description: "Design and develop electrical systems and devices.",
-  },
-  {
-    id: 3,
-    name: "Information Technology",
-    faculty: "Faculty of Computing and Information Systems",
-    admissionChance: "High",
-    duration: "4 years",
-    type: "Regular",
-    requirements: "A1-C6 in Math (Core), Physics, Any other subject",
-    description: "Focus on IT infrastructure, networks, and systems administration.",
-  },
-  {
-    id: 4,
-    name: "Applied Physics",
-    faculty: "College of Science",
-    admissionChance: "Medium",
-    duration: "4 years",
-    type: "Parallel",
-    requirements: "A1-C6 in Math (Core & Elective), Physics, Chemistry",
-    description: "Apply physics principles to solve real-world problems.",
-  },
-]
-
+import * as SecureStore from "expo-secure-store"
 import type { StackScreenProps } from "@react-navigation/stack"
+import Constants from "expo-constants"
 
 type RootStackParamList = {
-  ProgramRecommendations: { course: string; results: Record<string, any> }
+  ProgramRecommendations: { course: string; results: Record<string, string>; gender?: string }
   Chat: undefined
 }
 
@@ -71,20 +38,149 @@ interface TypeColor {
 type ProgramType = "Regular" | "Fee-Paying" | "Parallel" | string
 
 interface Program {
-  id: number
+  docId: string
   name: string
-  faculty: string
+  college: string
   admissionChance: AdmissionChance
-  duration: string
   type: ProgramType
   requirements: string
   description: string
 }
-type RenderProgramCard = (program: Program) => ReactElement
+
+interface RecommendationResponse {
+  aggregate: number
+  recommendations: {
+    name: string
+    college: string
+    coreRequirements: string[]
+    electiveRequirements: string[]
+    cutoff: number
+    cutoffSource: string
+    fees: { regular_freshers: number; fee_paying_freshers: number; residential_freshers: number }
+  }[]
+  warnings: string[]
+}
 
 const ProgramRecommendationsScreen = ({ route, navigation }: Props) => {
-  const { course, results } = route.params || { course: "", results: {} }
-  const [savedRecommendations, setSavedRecommendations] = useState<number[]>([])
+  const { course, results, gender = "male" } = route.params || { course: "", results: {}, gender: "male" }
+  const [recommendations, setRecommendations] = useState<Program[]>([])
+  const [aggregateScore, setAggregateScore] = useState<number | null>(null)
+  const [warnings, setWarnings] = useState<string[]>([])
+  const [savedRecommendations, setSavedRecommendations] = useState<string[]>([])
+  const [isLoading, setIsLoading] = useState(true)
+
+  const API_BASE_URL = Constants.expoConfig?.extra?.apiBaseUrl || "https://knust-chat-bot-backend.onrender.com"
+
+  useEffect(() => {
+    fetchRecommendations()
+  }, [])
+
+  const fetchRecommendations = async () => {
+    setIsLoading(true)
+    try {
+      let idToken: string | null = null
+      try {
+        idToken = await SecureStore.getItemAsync("idToken")
+      } catch (error) {
+        idToken = await AsyncStorage.getItem("idToken")
+      }
+
+      if (!idToken) {
+        throw new Error("No authentication token found. Please sign in again.")
+      }
+
+      const requestBody = {
+        grades: {
+          english: results["English Language"] || "",
+          math: results["Mathematics (Core)"] || "",
+          integratedScience: results["Integrated Science"] || "",
+          socialStudies: results["Social Studies"] || "",
+          electives: Object.keys(results)
+            .filter(
+              (subject) =>
+                !["English Language", "Mathematics (Core)", "Integrated Science", "Social Studies"].includes(subject)
+            )
+            .map((subject) => ({
+              subject,
+              grade: results[subject],
+            })),
+        },
+        gender,
+      }
+
+      const response = await fetch(`${API_BASE_URL}/recommend`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${idToken}`,
+        },
+        body: JSON.stringify(requestBody),
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        if (response.status === 401) {
+          throw new Error("Authentication failed. Please sign in again.")
+        } else if (response.status === 400) {
+          throw new Error(errorData.error || "Invalid grades format.")
+        } else {
+          throw new Error(errorData.error || `Failed to fetch recommendations: ${response.status}`)
+        }
+      }
+
+      const data: RecommendationResponse = await response.json()
+      console.log("API Response:", JSON.stringify(data, null, 2))
+
+      const programs: Program[] = data.recommendations.map((rec, index) => {
+        // Extract program type from name (e.g., "Fee-Paying Only" in "BDS Bachelor of Dental Surgery (Fee-Paying Only)")
+        let programType: ProgramType = "Regular"
+        if (rec.name.includes("(Fee-Paying Only)")) {
+          programType = "Fee-Paying"
+        } else if (rec.name.includes("(Parallel)")) {
+          programType = "Parallel"
+        }
+
+        return {
+          docId: `${rec.name}-${index}`, // Generate a unique ID since docId is missing
+          name: rec.name.replace(/\(.*?\)/g, "").trim(), // Remove type suffix from name
+          college: rec.college,
+          admissionChance: calculateAdmissionChance(rec.cutoff, data.aggregate),
+          type: programType,
+          requirements: [...rec.coreRequirements, ...rec.electiveRequirements].join(", "),
+          description: `Study at ${rec.college}. Requires ${rec.electiveRequirements.length} electives.`,
+        }
+      })
+
+      setRecommendations(programs)
+      setAggregateScore(data.aggregate)
+      setWarnings(data.warnings)
+    } catch (error: any) {
+      console.error("Error fetching recommendations:", error)
+      Alert.alert(
+        "Error",
+        error.message || "Failed to load recommendations. Please try again.",
+        [
+          {
+            text: "Retry",
+            onPress: () => fetchRecommendations(),
+          },
+          {
+            text: "Go to Chat",
+            onPress: () => navigation.navigate("Chat"),
+          },
+        ]
+      )
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const calculateAdmissionChance = (cutoff: number, aggregate: number): AdmissionChance => {
+    if (isNaN(cutoff)) return "Unknown"
+    if (aggregate <= cutoff) return "High"
+    if (aggregate <= cutoff + 5) return "Medium"
+    return "Low"
+  }
 
   const getChanceColor = (chance: AdmissionChance): ChanceColor => {
     switch (chance) {
@@ -98,7 +194,7 @@ const ProgramRecommendationsScreen = ({ route, navigation }: Props) => {
         return { backgroundColor: "#F3F4F6", color: "#4B5563" }
     }
   }
-  // You can add more helper functions here if needed in the future.
+
   const getTypeColor = (type: ProgramType): TypeColor => {
     switch (type) {
       case "Regular":
@@ -116,40 +212,42 @@ const ProgramRecommendationsScreen = ({ route, navigation }: Props) => {
     const recommendationsData = {
       course,
       results,
-      programs: samplePrograms,
+      gender,
+      programs: recommendations,
+      aggregate: aggregateScore,
+      warnings,
       timestamp: new Date().toISOString(),
     }
 
     try {
-      const existingRecommendations = JSON.parse((await AsyncStorage.getItem("knust-saved-recommendations")) || "[]")
+      const existingRecommendations = JSON.parse(
+        (await AsyncStorage.getItem("knust-saved-recommendations")) || "[]"
+      )
       existingRecommendations.push(recommendationsData)
       await AsyncStorage.setItem("knust-saved-recommendations", JSON.stringify(existingRecommendations))
-
       Alert.alert("Success", "Your program recommendations have been saved to your profile.")
     } catch (error) {
       Alert.alert("Error", "Failed to save recommendations.")
     }
   }
 
-  const toggleSaveProgram = (programId: number) => {
-    if (savedRecommendations.includes(programId)) {
-      setSavedRecommendations((prev: number[]) => prev.filter((id) => id !== programId))
-    } else {
-      setSavedRecommendations((prev: number[]) => [...prev, programId])
-    }
+  const toggleSaveProgram = (docId: string) => {
+    setSavedRecommendations((prev) =>
+      prev.includes(docId) ? prev.filter((id) => id !== docId) : [...prev, docId]
+    )
   }
 
-  const renderProgramCard: RenderProgramCard = (program) => {
+  const renderProgramCard: (program: Program) => ReactElement = (program) => {
     const chanceStyle = getChanceColor(program.admissionChance)
     const typeStyle = getTypeColor(program.type)
-    const isSaved = savedRecommendations.includes(program.id)
+    const isSaved = savedRecommendations.includes(program.docId)
 
     return (
-      <View key={program.id} style={styles.programCard}>
+      <View key={program.docId} style={styles.programCard}>
         <View style={styles.programHeader}>
           <View style={styles.programTitleContainer}>
             <Text style={styles.programName}>{program.name}</Text>
-            <TouchableOpacity onPress={() => toggleSaveProgram(program.id)} style={styles.saveButton}>
+            <TouchableOpacity onPress={() => toggleSaveProgram(program.docId)} style={styles.saveButton}>
               <MaterialIcons
                 name={isSaved ? "bookmark" : "bookmark-border"}
                 size={24}
@@ -157,7 +255,7 @@ const ProgramRecommendationsScreen = ({ route, navigation }: Props) => {
               />
             </TouchableOpacity>
           </View>
-          <Text style={styles.programFaculty}>{program.faculty}</Text>
+          <Text style={styles.programFaculty}>{program.college}</Text>
         </View>
 
         <View style={styles.programBadges}>
@@ -172,10 +270,6 @@ const ProgramRecommendationsScreen = ({ route, navigation }: Props) => {
         <Text style={styles.programDescription}>{program.description}</Text>
 
         <View style={styles.programDetails}>
-          <View style={styles.detailRow}>
-            <MaterialIcons name="schedule" size={16} color="#6B7280" />
-            <Text style={styles.detailText}>Duration: {program.duration}</Text>
-          </View>
           <View style={styles.detailRow}>
             <MaterialIcons name="assignment" size={16} color="#6B7280" />
             <Text style={styles.detailText}>Requirements: {program.requirements}</Text>
@@ -200,7 +294,6 @@ const ProgramRecommendationsScreen = ({ route, navigation }: Props) => {
     <SafeAreaView style={styles.container}>
       <StatusBar backgroundColor="#006633" barStyle="light-content" />
 
-      {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
           <MaterialIcons name="arrow-back" size={24} color="#FFFFFF" />
@@ -215,65 +308,90 @@ const ProgramRecommendationsScreen = ({ route, navigation }: Props) => {
       </View>
 
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-        {/* Summary Card */}
-        <View style={styles.summaryCard}>
-          <View style={styles.summaryHeader}>
-            <MaterialIcons name="analytics" size={24} color="#006633" />
-            <Text style={styles.summaryTitle}>Your Profile Summary</Text>
+        {isLoading ? (
+          <View style={styles.loadingContainer}>
+            <Text style={styles.loadingText}>Loading recommendations...</Text>
           </View>
-          <Text style={styles.summaryText}>
-            Based on your {course} background and WASSCE results, we've found {samplePrograms.length} programs that
-            match your qualifications.
-          </Text>
-          <View style={styles.summaryStats}>
-            <View style={styles.statItem}>
-              <Text style={styles.statNumber}>{samplePrograms.filter((p) => p.admissionChance === "High").length}</Text>
-              <Text style={styles.statLabel}>High Chance</Text>
-            </View>
-            <View style={styles.statItem}>
-              <Text style={styles.statNumber}>
-                {samplePrograms.filter((p) => p.admissionChance === "Medium").length}
+        ) : (
+          <>
+            <View style={styles.summaryCard}>
+              <View style={styles.summaryHeader}>
+                <MaterialIcons name="analytics" size={24} color="#006633" />
+                <Text style={styles.summaryTitle}>Your Profile Summary</Text>
+              </View>
+              <Text style={styles.summaryText}>
+                Based on your {course} background and WASSCE results, we've found {recommendations.length} programs
+                that match your qualifications.{" "}
+                {aggregateScore !== null && `Your aggregate score is ${aggregateScore}.`}
               </Text>
-              <Text style={styles.statLabel}>Medium Chance</Text>
+              {warnings.length > 0 && (
+                <View style={styles.warningsContainer}>
+                  <Text style={styles.warningsTitle}>Warnings:</Text>
+                  {warnings.map((warning, index) => (
+                    <Text key={index} style={styles.warningText}>
+                      - {warning}
+                    </Text>
+                  ))}
+                </View>
+              )}
+              <View style={styles.summaryStats}>
+                <View style={styles.statItem}>
+                  <Text style={styles.statNumber}>
+                    {recommendations.filter((p) => p.admissionChance === "High").length}
+                  </Text>
+                  <Text style={styles.statLabel}>High Chance</Text>
+                </View>
+                <View style={styles.statItem}>
+                  <Text style={styles.statNumber}>
+                    {recommendations.filter((p) => p.admissionChance === "Medium").length}
+                  </Text>
+                  <Text style={styles.statLabel}>Medium Chance</Text>
+                </View>
+                <View style={styles.statItem}>
+                  <Text style={styles.statNumber}>
+                    {recommendations.filter((p) => p.type === "Regular").length}
+                  </Text>
+                  <Text style={styles.statLabel}>Regular Stream</Text>
+                </View>
+              </View>
             </View>
-            <View style={styles.statItem}>
-              <Text style={styles.statNumber}>{samplePrograms.filter((p) => p.type === "Regular").length}</Text>
-              <Text style={styles.statLabel}>Regular Stream</Text>
+
+            <View style={styles.filterContainer}>
+              <Text style={styles.filterTitle}>Filter by:</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                <TouchableOpacity style={styles.filterChip}>
+                  <Text style={styles.filterChipText}>All Programs</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.filterChip}>
+                  <Text style={styles.filterChipText}>High Chance</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.filterChip}>
+                  <Text style={styles.filterChipText}>Regular Stream</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.filterChip}>
+                  <Text style={styles.filterChipText}>Engineering</Text>
+                </TouchableOpacity>
+              </ScrollView>
             </View>
-          </View>
-        </View>
 
-        {/* Filter Options */}
-        <View style={styles.filterContainer}>
-          <Text style={styles.filterTitle}>Filter by:</Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-            <TouchableOpacity style={styles.filterChip}>
-              <Text style={styles.filterChipText}>All Programs</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.filterChip}>
-              <Text style={styles.filterChipText}>High Chance</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.filterChip}>
-              <Text style={styles.filterChipText}>Regular Stream</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.filterChip}>
-              <Text style={styles.filterChipText}>Engineering</Text>
-            </TouchableOpacity>
-          </ScrollView>
-        </View>
+            <View style={styles.programsList}>
+              {recommendations.length > 0 ? (
+                recommendations.map(renderProgramCard)
+              ) : (
+                <Text style={styles.noProgramsText}>No programs found matching your criteria.</Text>
+              )}
+            </View>
 
-        {/* Programs List */}
-        <View style={styles.programsList}>{samplePrograms.map(renderProgramCard)}</View>
-
-        {/* Action Buttons */}
-        <View style={styles.actionContainer}>
-          <TouchableOpacity style={styles.primaryButton} onPress={() => navigation.navigate("Chat")}>
-            <Text style={styles.primaryButtonText}>Discuss with AI Assistant</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.secondaryButton}>
-            <Text style={styles.secondaryButtonText}>View All KNUST Programs</Text>
-          </TouchableOpacity>
-        </View>
+            <View style={styles.actionContainer}>
+              <TouchableOpacity style={styles.primaryButton} onPress={() => navigation.navigate("Chat")}>
+                <Text style={styles.primaryButtonText}>Discuss with AI Assistant</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.secondaryButton}>
+                <Text style={styles.secondaryButtonText}>View All KNUST Programs</Text>
+              </TouchableOpacity>
+            </View>
+          </>
+        )}
       </ScrollView>
     </SafeAreaView>
   )
@@ -314,6 +432,16 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingHorizontal: 16,
   },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 20,
+  },
+  loadingText: {
+    fontSize: 16,
+    color: "#6B7280",
+  },
   summaryCard: {
     backgroundColor: "#FFFFFF",
     borderRadius: 12,
@@ -339,6 +467,20 @@ const styles = StyleSheet.create({
     color: "#6B7280",
     lineHeight: 20,
     marginBottom: 16,
+  },
+  warningsContainer: {
+    marginBottom: 16,
+  },
+  warningsTitle: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#DC2626",
+    marginBottom: 8,
+  },
+  warningText: {
+    fontSize: 14,
+    color: "#DC2626",
+    lineHeight: 20,
   },
   summaryStats: {
     flexDirection: "row",
@@ -490,6 +632,12 @@ const styles = StyleSheet.create({
     color: "#006633",
     fontSize: 16,
     fontWeight: "600",
+  },
+  noProgramsText: {
+    fontSize: 16,
+    color: "#6B7280",
+    textAlign: "center",
+    marginVertical: 20,
   },
 })
 

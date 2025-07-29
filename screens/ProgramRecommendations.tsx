@@ -6,14 +6,14 @@ import * as SecureStore from "expo-secure-store"
 import type { ReactElement } from "react"
 import React, { useEffect, useState } from "react"
 import {
-    Alert,
-    SafeAreaView,
-    ScrollView,
-    StatusBar,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  Alert,
+  SafeAreaView,
+  ScrollView,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from "react-native"
 
 type RootStackParamList = {
@@ -37,14 +37,22 @@ interface TypeColor {
 
 type ProgramType = "Regular" | "Fee-Paying" | "Parallel" | string
 
+interface ElectiveRequirement {
+  type: string;
+  subject?: string;
+  options?: string[];
+  note?: string;
+}
+
 interface Program {
-  docId: string
+  docId: string;
   name: string
   college: string
   admissionChance: AdmissionChance
   type: ProgramType
   requirements: string
   description: string
+  fees: string
 }
 
 interface RecommendationResponse {
@@ -75,18 +83,50 @@ const ProgramRecommendationsScreen = ({ route, navigation }: Props) => {
     fetchRecommendations()
   }, [])
 
+  // Copy of getValidIdToken from ProfileScreen
+  const FIREBASE_API_KEY = "AIzaSyBa3Ht1TcWCrUSsN5o3mGhGTVPjjz-8KJU";
+  const getValidIdToken = async () => {
+    let idToken = await SecureStore.getItemAsync("idToken");
+    const refreshToken = await SecureStore.getItemAsync("refreshToken");
+    if (!idToken || !refreshToken) return null;
+    try {
+      // Test request to profile endpoint
+      const testResp = await fetch(`${API_BASE_URL}/profile`, {
+        headers: { Authorization: `Bearer ${idToken}` },
+      });
+      if (testResp.ok) return idToken;
+    } catch (error) {
+      // Ignore, will try refresh
+    }
+    // Try to refresh token
+    try {
+      const firebaseResp = await fetch(
+        `https://securetoken.googleapis.com/v1/token?key=${FIREBASE_API_KEY}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/x-www-form-urlencoded" },
+          body: `grant_type=refresh_token&refresh_token=${refreshToken}`,
+        }
+      );
+      const firebaseData = await firebaseResp.json();
+      if (firebaseData.id_token) {
+        await SecureStore.setItemAsync("idToken", firebaseData.id_token);
+        await SecureStore.setItemAsync("refreshToken", firebaseData.refresh_token);
+        return firebaseData.id_token;
+      }
+    } catch (refreshError) {
+      console.error("Token refresh failed:", refreshError);
+      return null;
+    }
+    return null;
+  }
+
   const fetchRecommendations = async () => {
     setIsLoading(true)
     try {
-      let idToken: string | null = null
-      try {
-        idToken = await SecureStore.getItemAsync("idToken")
-      } catch (error) {
-        idToken = await AsyncStorage.getItem("idToken")
-      }
-
+      const idToken = await getValidIdToken();
       if (!idToken) {
-        throw new Error("No authentication token found. Please sign in again.")
+        throw new Error("No authentication token found. Please sign in again.");
       }
 
       const requestBody = {
@@ -131,25 +171,45 @@ const ProgramRecommendationsScreen = ({ route, navigation }: Props) => {
       const data: RecommendationResponse = await response.json()
       console.log("API Response:", JSON.stringify(data, null, 2))
 
+      // Map requirements and fees properly
       const programs: Program[] = data.recommendations.map((rec, index) => {
-        // Extract program type from name (e.g., "Fee-Paying Only" in "BDS Bachelor of Dental Surgery (Fee-Paying Only)")
         let programType: ProgramType = "Regular"
         if (rec.name.includes("(Fee-Paying Only)")) {
           programType = "Fee-Paying"
         } else if (rec.name.includes("(Parallel)")) {
           programType = "Parallel"
         }
-
+        // Format requirements
+        let requirements = "";
+        if (Array.isArray(rec.coreRequirements)) {
+          requirements += rec.coreRequirements.join(", ");
+        } else if (typeof rec.coreRequirements === "string") {
+          requirements += rec.coreRequirements;
+        }
+        if (Array.isArray(rec.electiveRequirements)) {
+          requirements += ", " + rec.electiveRequirements.map((er: string | ElectiveRequirement) => {
+            if (typeof er === "string") return er;
+            if (er.type === "required") return er.subject;
+            if (er.type === "choice") return er.note ? er.note : er.options?.join(" or ");
+            return JSON.stringify(er);
+          }).join(", ");
+        } else if (typeof rec.electiveRequirements === "string") {
+          requirements += ", " + rec.electiveRequirements;
+        }
+        // Format fees
+        let fees = "";
+        if (rec.fees) {
+          fees = `Regular: GH¢${rec.fees.regular_freshers}, Fee-Paying: GH¢${rec.fees.fee_paying_freshers}, Residential: GH¢${rec.fees.residential_freshers}`;
+        }
         return {
-          docId: `${rec.name}-${index}`, // Generate a unique ID since docId is missing
-          name: rec.name.replace(/\(.*?\)/g, "").trim(), // Remove type suffix from name
+          docId: `${rec.name}-${index}`,
+          name: rec.name.replace(/\(.*?\)/g, "").trim(),
           college: rec.college,
           admissionChance: calculateAdmissionChance(rec.cutoff, data.aggregate),
           type: programType,
-          requirements: typeof rec.coreRequirements === 'string' && typeof rec.electiveRequirements === 'string' 
-            ? `${rec.coreRequirements}, ${rec.electiveRequirements}`
-            : [...(rec.coreRequirements || []), ...(rec.electiveRequirements || [])].join(", "),
-          description: `Study at ${rec.college}. Requires ${Array.isArray(rec.electiveRequirements) ? rec.electiveRequirements.length : 0} electives.`,
+          requirements,
+          description: `Study at ${rec.college}.`,
+          fees,
         }
       })
 
@@ -308,24 +368,15 @@ const ProgramRecommendationsScreen = ({ route, navigation }: Props) => {
   const renderProgramCard: (program: Program) => ReactElement = (program) => {
     const chanceStyle = getChanceColor(program.admissionChance)
     const typeStyle = getTypeColor(program.type)
-    const isSaved = savedRecommendations.includes(program.docId)
-
+    // Removed bookmark icon and save button
     return (
       <View key={program.docId} style={styles.programCard}>
         <View style={styles.programHeader}>
           <View style={styles.programTitleContainer}>
             <Text style={styles.programName}>{program.name}</Text>
-            <TouchableOpacity onPress={() => toggleSaveProgram(program.docId, program.name)} style={styles.saveButton}>
-              <MaterialIcons
-                name={isSaved ? "bookmark" : "bookmark-border"}
-                size={24}
-                color={isSaved ? "#006633" : "#6B7280"}
-              />
-            </TouchableOpacity>
           </View>
           <Text style={styles.programFaculty}>{program.college}</Text>
         </View>
-
         <View style={styles.programBadges}>
           <View style={[styles.badge, chanceStyle]}>
             <Text style={[styles.badgeText, { color: chanceStyle.color }]}>{program.admissionChance} Chance</Text>
@@ -334,16 +385,17 @@ const ProgramRecommendationsScreen = ({ route, navigation }: Props) => {
             <Text style={[styles.badgeText, { color: typeStyle.color }]}>{program.type}</Text>
           </View>
         </View>
-
         <Text style={styles.programDescription}>{program.description}</Text>
-
         <View style={styles.programDetails}>
           <View style={styles.detailRow}>
             <MaterialIcons name="assignment" size={16} color="#6B7280" />
             <Text style={styles.detailText}>Requirements: {program.requirements}</Text>
           </View>
+          <View style={styles.detailRow}>
+            <MaterialIcons name="attach-money" size={16} color="#6B7280" />
+            <Text style={styles.detailText}>Fees: {program.fees}</Text>
+          </View>
         </View>
-
         <View style={styles.programActions}>
           <TouchableOpacity style={styles.actionButton}>
             <MaterialIcons name="info" size={16} color="#006633" />
@@ -615,9 +667,6 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
     color: "#1F2937",
     flex: 1,
-  },
-  saveButton: {
-    padding: 4,
   },
   programFaculty: {
     fontSize: 14,

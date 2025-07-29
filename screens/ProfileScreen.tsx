@@ -1,8 +1,9 @@
-import { MaterialIcons } from "@expo/vector-icons"
-import { useNavigation } from "@react-navigation/native"
-import axios from "axios"
-import type React from "react"
-import { useEffect, useState } from "react"
+import { MaterialIcons } from "@expo/vector-icons";
+import { useNavigation } from "@react-navigation/native";
+import axios from "axios";
+import * as SecureStore from 'expo-secure-store';
+import type React from "react";
+import { useEffect, useState } from "react";
 import {
   Alert,
   SafeAreaView,
@@ -12,8 +13,9 @@ import {
   Text,
   TouchableOpacity,
   View,
-} from "react-native"
-import type { NavigationProp } from "../types/navigation"
+} from "react-native";
+import { API_BASE_URL } from '../constants/api';
+import type { NavigationProp } from "../types/navigation";
 
 type ProfileScreenProps = {
   onLogout?: () => void
@@ -36,14 +38,60 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({ onLogout }) => {
     fetchUserProfile()
   }, [])
 
+  const FIREBASE_API_KEY = "AIzaSyBa3Ht1TcWCrUSsN5o3mGhGTVPjjz-8KJU";
+
+  const getValidIdToken = async () => {
+    let idToken = await SecureStore.getItemAsync("idToken");
+    const refreshToken = await SecureStore.getItemAsync("refreshToken");
+    if (!idToken || !refreshToken) return null;
+    // Try a test request with the current token
+    try {
+      await axios.get(`${API_BASE_URL}/profile`, {
+        headers: { Authorization: `Bearer ${idToken}` },
+      });
+      return idToken;
+    } catch (error: any) {
+      // If token is invalid/expired, refresh it
+      if (error.response && (error.response.status === 401 || error.response.status === 403)) {
+        try {
+          const firebaseResp = await fetch(
+            `https://securetoken.googleapis.com/v1/token?key=${FIREBASE_API_KEY}`,
+            {
+              method: "POST",
+              headers: { "Content-Type": "application/x-www-form-urlencoded" },
+              body: `grant_type=refresh_token&refresh_token=${refreshToken}`,
+            }
+          );
+          const firebaseData = await firebaseResp.json();
+          if (firebaseData.id_token) {
+            await SecureStore.setItemAsync("idToken", firebaseData.id_token);
+            await SecureStore.setItemAsync("refreshToken", firebaseData.refresh_token);
+            return firebaseData.id_token;
+          }
+        } catch (refreshError) {
+          console.error("Token refresh failed:", refreshError);
+          return null;
+        }
+      }
+      return null;
+    }
+  }
+
   const fetchUserProfile = async () => {
     try {
-      const response = await axios.get("/profile")
+      const idToken = await getValidIdToken();
+      if (!idToken) {
+        Alert.alert("Session Expired", "Please log in again.");
+        return;
+      }
+      const response = await axios.get(`${API_BASE_URL}/profile`, {
+        headers: { Authorization: `Bearer ${idToken}` },
+      });
       if (response.data) {
-        setUserProfile(response.data)
+        setUserProfile(response.data);
       }
     } catch (error) {
-      console.error("Error fetching profile:", error)
+      console.error("Error fetching profile:", error);
     }
   }
 

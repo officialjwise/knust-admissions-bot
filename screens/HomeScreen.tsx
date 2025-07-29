@@ -2,6 +2,7 @@ import { MaterialIcons } from "@expo/vector-icons"
 import AsyncStorage from "@react-native-async-storage/async-storage"
 import { useNavigation } from "@react-navigation/native"
 import axios from "axios"
+import * as SecureStore from 'expo-secure-store'
 import React, { JSX, useEffect, useState } from "react"
 import {
     Alert,
@@ -16,6 +17,7 @@ import {
     TouchableOpacity,
     View
 } from "react-native"
+import { API_BASE_URL } from '../constants/api'
 import type { NavigationProp } from "../types/navigation"
 
 const { width } = Dimensions.get("window")
@@ -46,12 +48,21 @@ const HomeScreen = ({ onLogout }: { onLogout: () => void }) => {
 
   const fetchUserProfile = async () => {
     try {
-      const response = await axios.get("/profile")
+      const token = await SecureStore.getItemAsync("idToken");
+      if (!token) {
+        console.error("No token found. Please log in again.");
+        return;
+      }
+      const response = await axios.get(`${API_BASE_URL}/profile`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
       if (response.data && response.data.name) {
-        setUserName(response.data.name)
+        setUserName(response.data.name);
       }
     } catch (error) {
-      console.error("Error fetching user profile:", error)
+      console.error("Error fetching user profile:", error);
     }
   }
 

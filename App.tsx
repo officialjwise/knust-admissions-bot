@@ -1,29 +1,33 @@
-import type React from "react"
-import { useState, useEffect } from "react"
+import AsyncStorage from "@react-native-async-storage/async-storage"
 import { NavigationContainer } from "@react-navigation/native"
 import { createStackNavigator } from "@react-navigation/stack"
-import AsyncStorage from "@react-native-async-storage/async-storage"
 import * as SecureStore from "expo-secure-store"
+import type React from "react"
+import { useEffect, useState } from "react"
 
 // Import navigation types
 import type { RootStackParamList } from "./types/navigation"
 
 // Import all screens
-import SplashScreen from "./screens/SplashScreen"
-import OnboardingScreen from "./screens/OnboardingScreen"
-import SignInScreen from "./screens/SignInScreen"
-import SignUpScreen from "./screens/SignUpScreen"
+import AboutScreen from "./screens/AboutScreen"
+import ChangePasswordScreen from "./screens/ChangePasswordScreen"
+import ChatScreen from "./screens/ChatScreen"
+import CourseSelectionScreen from "./screens/CourseSelection"
+import EditProfileScreen from "./screens/EditProfileScreen"
+import FAQScreen from "./screens/FAQScreen"
 import ForgotPasswordScreen from "./screens/ForgotPasswordScreen"
 import HomeScreen from "./screens/HomeScreen"
-import ProfileScreen from "./screens/ProfileScreen"
-import EditProfileScreen from "./screens/EditProfileScreen"
-import ChangePasswordScreen from "./screens/ChangePasswordScreen"
-import CourseSelectionScreen from "./screens/CourseSelection"
-import WassceInputScreen from "./screens/WassceInputScreen"
-import ProgramRecommendationsScreen from "./screens/ProgramRecommendations"
-import ChatScreen from "./screens/ChatScreen"
-import FAQScreen from "./screens/FAQScreen"
 import InquiryHistoryScreen from "./screens/InquiryHistoryScreen"
+import OnboardingScreen from "./screens/OnboardingScreen"
+import ProfileScreen from "./screens/ProfileScreen"
+import ProgramRecommendationsScreen from "./screens/ProgramRecommendations"
+import ProgramSearchScreen from "./screens/ProgramSearchScreen"
+import SavedProgramsScreen from "./screens/SavedProgramsScreen"
+import SignInScreen from "./screens/SignInScreen"
+import SignUpScreen from "./screens/SignUpScreen"
+import SplashScreen from "./screens/SplashScreen"
+import SupportScreen from "./screens/SupportScreen"
+import WassceInputScreen from "./screens/WassceInputScreen"
 
 const Stack = createStackNavigator<RootStackParamList>()
 
@@ -121,6 +125,10 @@ const App: React.FC<AppProps> = () => {
             <Stack.Screen name="Chat" component={ChatScreen} />
             <Stack.Screen name="FAQ" component={FAQScreen} />
             <Stack.Screen name="InquiryHistory" component={InquiryHistoryScreen} />
+            <Stack.Screen name="ProgramSearch" component={ProgramSearchScreen} />
+            <Stack.Screen name="SavedPrograms" component={SavedProgramsScreen} />
+            <Stack.Screen name="About" component={AboutScreen} />
+            <Stack.Screen name="Support" component={SupportScreen} />
           </>
         )}
       </Stack.Navigator>

@@ -1,20 +1,20 @@
-import React, { useState, useEffect } from "react"
-import type { ReactElement } from "react"
-import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  TouchableOpacity,
-  SafeAreaView,
-  StatusBar,
-  Alert,
-} from "react-native"
 import { MaterialIcons } from "@expo/vector-icons"
 import AsyncStorage from "@react-native-async-storage/async-storage"
-import * as SecureStore from "expo-secure-store"
 import type { StackScreenProps } from "@react-navigation/stack"
 import Constants from "expo-constants"
+import * as SecureStore from "expo-secure-store"
+import type { ReactElement } from "react"
+import React, { useEffect, useState } from "react"
+import {
+    Alert,
+    SafeAreaView,
+    ScrollView,
+    StatusBar,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
+} from "react-native"
 
 type RootStackParamList = {
   ProgramRecommendations: { course: string; results: Record<string, string>; gender?: string }
@@ -146,8 +146,10 @@ const ProgramRecommendationsScreen = ({ route, navigation }: Props) => {
           college: rec.college,
           admissionChance: calculateAdmissionChance(rec.cutoff, data.aggregate),
           type: programType,
-          requirements: [...rec.coreRequirements, ...rec.electiveRequirements].join(", "),
-          description: `Study at ${rec.college}. Requires ${rec.electiveRequirements.length} electives.`,
+          requirements: typeof rec.coreRequirements === 'string' && typeof rec.electiveRequirements === 'string' 
+            ? `${rec.coreRequirements}, ${rec.electiveRequirements}`
+            : [...(rec.coreRequirements || []), ...(rec.electiveRequirements || [])].join(", "),
+          description: `Study at ${rec.college}. Requires ${Array.isArray(rec.electiveRequirements) ? rec.electiveRequirements.length : 0} electives.`,
         }
       })
 
@@ -209,33 +211,99 @@ const ProgramRecommendationsScreen = ({ route, navigation }: Props) => {
   }
 
   const saveRecommendations = async () => {
-    const recommendationsData = {
-      course,
-      results,
-      gender,
-      programs: recommendations,
-      aggregate: aggregateScore,
-      warnings,
-      timestamp: new Date().toISOString(),
-    }
-
     try {
-      const existingRecommendations = JSON.parse(
-        (await AsyncStorage.getItem("knust-saved-recommendations")) || "[]"
-      )
-      existingRecommendations.push(recommendationsData)
-      await AsyncStorage.setItem("knust-saved-recommendations", JSON.stringify(existingRecommendations))
-      Alert.alert("Success", "Your program recommendations have been saved to your profile.")
-    } catch (error) {
-      Alert.alert("Error", "Failed to save recommendations.")
-    }
-  }
+      let idToken: string | null = null;
+      try {
+        idToken = await SecureStore.getItemAsync("idToken");
+      } catch (error) {
+        idToken = await AsyncStorage.getItem("idToken");
+      }
 
-  const toggleSaveProgram = (docId: string) => {
-    setSavedRecommendations((prev) =>
-      prev.includes(docId) ? prev.filter((id) => id !== docId) : [...prev, docId]
-    )
-  }
+      if (!idToken) {
+        Alert.alert("Error", "Please sign in again to save programs.", [
+          { text: "OK", onPress: () => navigation.goBack() }
+        ]);
+        return;
+      }
+
+      // Save all recommended programs
+      const savePromises = recommendations.map(program =>
+        fetch(`${API_BASE_URL}/saved-programs`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${idToken}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            programName: program.name
+          }),
+        })
+      );
+
+      await Promise.all(savePromises);
+      Alert.alert("Success", "All recommended programs have been saved to your bookmarks.");
+    } catch (error) {
+      console.error("Error saving programs:", error);
+      Alert.alert("Error", "Failed to save programs. Please try again.");
+    }
+  };
+
+  const saveProgram = async (programName: string) => {
+    try {
+      let idToken: string | null = null;
+      try {
+        idToken = await SecureStore.getItemAsync("idToken");
+      } catch (error) {
+        idToken = await AsyncStorage.getItem("idToken");
+      }
+
+      if (!idToken) {
+        Alert.alert("Error", "Please sign in again to save programs.", [
+          { text: "OK", onPress: () => navigation.goBack() }
+        ]);
+        return;
+      }
+
+      const response = await fetch(`${API_BASE_URL}/saved-programs`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${idToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          programName: programName
+        }),
+      });
+
+      if (response.status === 401 || response.status === 403) {
+        Alert.alert("Session Expired", "Please sign in again.", [
+          { text: "OK", onPress: () => navigation.goBack() }
+        ]);
+        return;
+      }
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
+      }
+
+      Alert.alert("Success", `${programName} has been saved to your bookmarks.`);
+    } catch (error) {
+      console.error("Error saving program:", error);
+      Alert.alert("Error", "Failed to save program. Please try again.");
+    }
+  };
+
+  const toggleSaveProgram = async (docId: string, programName: string) => {
+    if (savedRecommendations.includes(docId)) {
+      // Remove from local state (we don't have delete endpoint in this context)
+      setSavedRecommendations((prev) => prev.filter((id) => id !== docId));
+    } else {
+      // Save the program
+      await saveProgram(programName);
+      setSavedRecommendations((prev) => [...prev, docId]);
+    }
+  };
 
   const renderProgramCard: (program: Program) => ReactElement = (program) => {
     const chanceStyle = getChanceColor(program.admissionChance)
@@ -247,7 +315,7 @@ const ProgramRecommendationsScreen = ({ route, navigation }: Props) => {
         <View style={styles.programHeader}>
           <View style={styles.programTitleContainer}>
             <Text style={styles.programName}>{program.name}</Text>
-            <TouchableOpacity onPress={() => toggleSaveProgram(program.docId)} style={styles.saveButton}>
+            <TouchableOpacity onPress={() => toggleSaveProgram(program.docId, program.name)} style={styles.saveButton}>
               <MaterialIcons
                 name={isSaved ? "bookmark" : "bookmark-border"}
                 size={24}

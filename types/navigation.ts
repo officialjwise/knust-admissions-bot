@@ -1,5 +1,5 @@
-import type { StackNavigationProp } from "@react-navigation/stack"
 import type { RouteProp } from "@react-navigation/native"
+import type { StackNavigationProp } from "@react-navigation/stack"
 
 export type RootStackParamList = {
   Splash: undefined
@@ -21,6 +21,7 @@ export type RootStackParamList = {
   Support: undefined
   About: undefined
   Programs: undefined
+  ProgramSearch: undefined
 }
 
 export type NavigationProp = StackNavigationProp<RootStackParamList>

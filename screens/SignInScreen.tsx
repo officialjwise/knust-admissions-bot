@@ -1,23 +1,23 @@
+import { MaterialIcons } from "@expo/vector-icons"
+import AsyncStorage from "@react-native-async-storage/async-storage"
+import { useNavigation, useRoute } from "@react-navigation/native"
+import Constants from "expo-constants"
+import * as SecureStore from "expo-secure-store"
 import type React from "react"
 import { useState } from "react"
 import {
-  View,
-  Text,
-  StyleSheet,
-  TextInput,
-  TouchableOpacity,
-  SafeAreaView,
-  StatusBar,
   Alert,
   KeyboardAvoidingView,
   Platform,
+  SafeAreaView,
   ScrollView,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from "react-native"
-import AsyncStorage from "@react-native-async-storage/async-storage"
-import * as SecureStore from "expo-secure-store"
-import { useNavigation, useRoute } from "@react-navigation/native"
-import { MaterialIcons } from "@expo/vector-icons"
-import Constants from "expo-constants"
 import type { NavigationProp, ScreenRouteProp } from "../types/navigation"
 
 type SignInScreenProps = {}
@@ -63,26 +63,6 @@ const SignInScreen: React.FC<SignInScreenProps> = () => {
     setIsLoading(true)
 
     try {
-      // For demo purposes, allow demo credentials to work offline
-      if (formData.email === "demo@knust.edu.gh" && formData.password === "demo123") {
-        try {
-          await SecureStore.setItemAsync("idToken", "demo-token")
-          await SecureStore.setItemAsync("refreshToken", "demo-refresh-token")
-          await SecureStore.setItemAsync("userEmail", formData.email)
-          await SecureStore.setItemAsync("userUid", "demo-uid")
-        } catch (secureStoreError) {
-          await AsyncStorage.setItem("idToken", "demo-token")
-          await AsyncStorage.setItem("refreshToken", "demo-refresh-token")
-          await AsyncStorage.setItem("userEmail", formData.email)
-          await AsyncStorage.setItem("userUid", "demo-uid")
-        }
-
-        if (onAuthChange) {
-          onAuthChange()
-        }
-        return
-      }
-
       // Step 1: Sign in with backend to get custom token
       console.log("Attempting to sign in with URL:", `${API_BASE_URL}/signin`)
       const signInResponse = await fetch(`${API_BASE_URL}/signin`, {
@@ -156,24 +136,7 @@ const SignInScreen: React.FC<SignInScreenProps> = () => {
     } catch (error: any) {
       console.error("Signin error:", error)
 
-      if (error.message.includes("Network request failed") || error.message.includes("timeout")) {
-        Alert.alert(
-          "Connection Error",
-          "Unable to connect to the server. Please check your internet connection and try again.",
-          [
-            {
-              text: "Try Demo",
-              onPress: () => {
-                setFormData({ email: "demo@knust.edu.gh", password: "demo123" })
-                handleSignIn()
-              },
-            },
-            { text: "OK" },
-          ]
-        )
-      } else {
-        Alert.alert("Error", error.message || "Failed to sign in. Please try again.")
-      }
+      Alert.alert("Error", error.message || "Failed to sign in. Please check your internet connection and try again.")
     } finally {
       setIsLoading(false)
     }
@@ -201,10 +164,6 @@ const SignInScreen: React.FC<SignInScreenProps> = () => {
             </View>
             <Text style={styles.title}>Welcome Back</Text>
             <Text style={styles.subtitle}>Sign in to continue your KNUST journey</Text>
-          </View>
-
-          <View style={styles.demoHint}>
-            <Text style={styles.demoHintText}>Demo: demo@knust.edu.gh / demo123</Text>
           </View>
 
           <View style={styles.form}>
@@ -283,20 +242,6 @@ const styles = StyleSheet.create({
   logoText: { fontSize: 32, color: "#FFFFFF" },
   title: { fontSize: 28, fontWeight: "bold", color: "#1F2937", marginBottom: 8 },
   subtitle: { fontSize: 16, color: "#6B7280", textAlign: "center" },
-  demoHint: {
-    backgroundColor: "#F0FDF4",
-    padding: 12,
-    borderRadius: 8,
-    marginBottom: 20,
-    borderWidth: 1,
-    borderColor: "#BBF7D0",
-  },
-  demoHintText: {
-    fontSize: 14,
-    color: "#166534",
-    textAlign: "center",
-    fontWeight: "500",
-  },
   form: { flex: 1 },
   inputContainer: { marginBottom: 20 },
   label: { fontSize: 14, fontWeight: "500", color: "#374151", marginBottom: 8 },

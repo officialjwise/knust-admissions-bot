@@ -1,8 +1,8 @@
 
-import React, { useState, useEffect } from "react"
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, StatusBar, Alert } from "react-native"
-import AsyncStorage from "@react-native-async-storage/async-storage"
 import { MaterialIcons } from "@expo/vector-icons"
+import AsyncStorage from "@react-native-async-storage/async-storage"
+import React, { useEffect, useState } from "react"
+import { Alert, SafeAreaView, ScrollView, StatusBar, StyleSheet, Text, TouchableOpacity, View } from "react-native"
 
 type Inquiry = {
   id: string
@@ -37,7 +37,7 @@ const InquiryHistoryScreen = ({ navigation }: { navigation: any }) => {
             question: "What are the requirements for BSc Computer Science?",
             answer:
               "For BSc Computer Science at KNUST, you need: Core subjects: A1-C6 in English, Mathematics, Integrated Science...",
-            timestamp: new Date("2024-12-20T10:30:00"),
+            timestamp: new Date("2025-12-20T10:30:00"),
             status: "answered",
             category: "programs",
           },
@@ -47,7 +47,7 @@ const InquiryHistoryScreen = ({ navigation }: { navigation: any }) => {
             title: "Application Status Check",
             question: "What is the status of my application?",
             answer: "Your application is currently under review. You will be notified once a decision is made.",
-            timestamp: new Date("2024-12-19T14:15:00"),
+            timestamp: new Date("2025-12-19T14:15:00"),
             status: "pending",
             category: "admission",
           },
@@ -58,7 +58,7 @@ const InquiryHistoryScreen = ({ navigation }: { navigation: any }) => {
             question: "How much are the tuition fees for engineering programs?",
             answer:
               "Engineering program fees vary by stream: Regular stream: GHS 3,000-4,000, Fee-paying: GHS 10,000-15,000...",
-            timestamp: new Date("2024-12-18T09:45:00"),
+            timestamp: new Date("2025-12-18T09:45:00"),
             status: "answered",
             category: "fees",
           },
@@ -68,7 +68,7 @@ const InquiryHistoryScreen = ({ navigation }: { navigation: any }) => {
             title: "Document Upload Issue",
             question: "I am having trouble uploading my documents",
             answer: "Please ensure your documents are in PDF format and under 5MB. Try clearing your browser cache...",
-            timestamp: new Date("2024-12-17T16:20:00"),
+            timestamp: new Date("2025-12-17T16:20:00"),
             status: "resolved",
             category: "technical",
           },
@@ -79,7 +79,7 @@ const InquiryHistoryScreen = ({ navigation }: { navigation: any }) => {
             question: "Is accommodation available on campus?",
             answer:
               "Yes, KNUST provides on-campus accommodation in various halls of residence. Room allocation is competitive...",
-            timestamp: new Date("2024-12-16T11:30:00"),
+            timestamp: new Date("2025-12-16T11:30:00"),
             status: "answered",
             category: "campus",
           },

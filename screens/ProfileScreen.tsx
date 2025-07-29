@@ -1,19 +1,18 @@
-import type React from "react"
-import { useState, useEffect } from "react"
-import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  TouchableOpacity,
-  SafeAreaView,
-  StatusBar,
-  Alert,
-  Switch,
-} from "react-native"
-import AsyncStorage from "@react-native-async-storage/async-storage"
-import { useNavigation } from "@react-navigation/native"
 import { MaterialIcons } from "@expo/vector-icons"
+import { useNavigation } from "@react-navigation/native"
+import axios from "axios"
+import type React from "react"
+import { useEffect, useState } from "react"
+import {
+  Alert,
+  SafeAreaView,
+  ScrollView,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from "react-native"
 import type { NavigationProp } from "../types/navigation"
 
 type ProfileScreenProps = {
@@ -21,66 +20,30 @@ type ProfileScreenProps = {
 }
 
 const ProfileScreen: React.FC<ProfileScreenProps> = ({ onLogout }) => {
-  // The function must return JSX (ReactNode), which it already does below.
   const [userProfile, setUserProfile] = useState({
-    firstName: "John",
-    lastName: "Doe",
-    email: "demo@knust.edu.gh",
-    phone: "+233 24 123 4567",
-    studentId: "KN2024001",
-    program: "BSc Computer Science",
-    level: "100",
-  })
-  type SettingsKey = "notifications" | "emailUpdates" | "darkMode" | "biometric"
-  
-  const [settings, setSettings] = useState<{
-    notifications: boolean
-    emailUpdates: boolean
-    darkMode: boolean
-    biometric: boolean
-  }>({
-    notifications: true,
-    emailUpdates: true,
-    darkMode: false,
-    biometric: false,
+    firstName: "",
+    lastName: "",
+    email: "",
+    phone: "",
+    studentId: "",
+    program: "",
+    level: "",
   })
 
   const navigation = useNavigation<NavigationProp>()
 
   useEffect(() => {
-    loadUserProfile()
-    loadSettings()
+    fetchUserProfile()
   }, [])
 
-  const loadUserProfile = async () => {
+  const fetchUserProfile = async () => {
     try {
-      const savedProfile = await AsyncStorage.getItem("userProfile")
-      if (savedProfile) {
-        setUserProfile(JSON.parse(savedProfile))
+      const response = await axios.get("/profile")
+      if (response.data) {
+        setUserProfile(response.data)
       }
     } catch (error) {
-      console.error("Error loading profile:", error)
-    }
-  }
-
-  const loadSettings = async () => {
-    try {
-      const savedSettings = await AsyncStorage.getItem("userSettings")
-      if (savedSettings) {
-        setSettings(JSON.parse(savedSettings))
-      }
-    } catch (error) {
-      console.error("Error loading settings:", error)
-    }
-  }
-
-  const updateSetting = async (key: SettingsKey, value: boolean) => {
-    const newSettings = { ...settings, [key]: value }
-    setSettings(newSettings)
-    try {
-      await AsyncStorage.setItem("userSettings", JSON.stringify(newSettings))
-    } catch (error) {
-      console.error("Error saving settings:", error)
+      console.error("Error fetching profile:", error)
     }
   }
 
@@ -92,7 +55,6 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({ onLogout }) => {
         style: "destructive",
         onPress: async () => {
           try {
-            await AsyncStorage.multiRemove(["userToken", "userEmail", "userProfile"])
             if (onLogout) {
               onLogout()
             }
@@ -163,18 +125,14 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({ onLogout }) => {
       title: "Support",
       subtitle: "Get help and contact us",
       icon: "support",
-      onPress: () => {
-        Alert.alert("Support", "Contact us at support@knust.edu.gh for assistance.")
-      },
+      onPress: () => navigation.navigate("Support"),
     },
     {
       id: "about",
       title: "About",
       subtitle: "App version and information",
       icon: "info",
-      onPress: () => {
-        Alert.alert("About", "KNUST Pathfinder v1.0.0\n\nYour comprehensive guide to KNUST admissions.")
-      },
+      onPress: () => navigation.navigate("About"),
     },
   ]
 
@@ -193,21 +151,6 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({ onLogout }) => {
     </TouchableOpacity>
   )
 
-  const renderSettingItem = (key: SettingsKey, title: string, subtitle: string) => (
-    <View key={key} style={styles.settingItem}>
-      <View style={styles.settingContent}>
-        <Text style={styles.settingTitle}>{title}</Text>
-        <Text style={styles.settingSubtitle}>{subtitle}</Text>
-      </View>
-      <Switch
-        value={settings[key]}
-        onValueChange={(value) => updateSetting(key, value)}
-        trackColor={{ false: "#D1D5DB", true: "#BBF7D0" }}
-        thumbColor={settings[key] ? "#006633" : "#F3F4F6"}
-      />
-    </View>
-  )
-
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar backgroundColor="#006633" barStyle="light-content" />
@@ -224,8 +167,7 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({ onLogout }) => {
           <View style={styles.profileCard}>
             <View style={styles.profileAvatar}>
               <Text style={styles.profileAvatarText}>
-                {userProfile.firstName.charAt(0)}
-                {userProfile.lastName.charAt(0)}
+                {userProfile.firstName ? userProfile.firstName[0] : "?"}
               </Text>
             </View>
             <View style={styles.profileInfo}>
@@ -247,16 +189,6 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({ onLogout }) => {
         </View>
 
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Settings</Text>
-          <View style={styles.settingsContainer}>
-            {renderSettingItem("notifications", "Push Notifications", "Receive app notifications")}
-            {renderSettingItem("emailUpdates", "Email Updates", "Get updates via email")}
-            {renderSettingItem("darkMode", "Dark Mode", "Use dark theme")}
-            {renderSettingItem("biometric", "Biometric Login", "Use fingerprint or face ID")}
-          </View>
-        </View>
-
-        <View style={styles.section}>
           <Text style={styles.sectionTitle}>Support</Text>
           {appMenuItems.map(renderMenuItem)}
         </View>
@@ -275,7 +207,7 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({ onLogout }) => {
 
         <View style={styles.appInfo}>
           <Text style={styles.appInfoText}>KNUST Pathfinder v1.0.0</Text>
-          <Text style={styles.appInfoText}>© 2024 KNUST. All rights reserved.</Text>
+          <Text style={styles.appInfoText}>© 2025 KNUST. All rights reserved.</Text>
         </View>
       </ScrollView>
     </SafeAreaView>
@@ -408,33 +340,6 @@ const styles = StyleSheet.create({
     marginBottom: 2,
   },
   menuItemSubtitle: {
-    fontSize: 14,
-    color: "#6B7280",
-  },
-  settingsContainer: {
-    backgroundColor: "#FFFFFF",
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: "#E5E7EB",
-  },
-  settingItem: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    padding: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: "#F3F4F6",
-  },
-  settingContent: {
-    flex: 1,
-  },
-  settingTitle: {
-    fontSize: 16,
-    fontWeight: "500",
-    color: "#1F2937",
-    marginBottom: 2,
-  },
-  settingSubtitle: {
     fontSize: 14,
     color: "#6B7280",
   },

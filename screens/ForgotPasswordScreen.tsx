@@ -1,19 +1,19 @@
+import { MaterialIcons } from "@expo/vector-icons"
+import { useNavigation } from "@react-navigation/native"
 import { useState } from "react"
 import {
-  View,
-  Text,
-  StyleSheet,
-  TextInput,
-  TouchableOpacity,
-  SafeAreaView,
-  StatusBar,
   Alert,
   KeyboardAvoidingView,
   Platform,
+  SafeAreaView,
   ScrollView,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from "react-native"
-import { useNavigation } from "@react-navigation/native"
-import { MaterialIcons } from "@expo/vector-icons"
 import type { NavigationProp } from "../types/navigation"
 
 interface FormErrors {
@@ -83,13 +83,26 @@ const ForgotPasswordScreen = () => {
 
     setIsLoading(true)
     try {
-      await new Promise((resolve) => setTimeout(resolve, 2000))
+      const response = await fetch("https://knust-chat-bot-backend.onrender.com/forgot-password", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          email: email,
+        }),
+      })
 
-      Alert.alert("Code Sent", `A 6-digit verification code has been sent to ${email}. Please check your email.`, [
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}))
+        throw new Error(errorData.error || "Failed to send reset email")
+      }
+
+      Alert.alert("Reset Link Sent", `A password reset link has been sent to ${email}. Please check your email and follow the instructions.`, [
         { text: "OK", onPress: () => setStep(2) },
       ])
-    } catch (error) {
-      Alert.alert("Error", "Failed to send verification code. Please try again.")
+    } catch (error: any) {
+      Alert.alert("Error", error.message || "Failed to send reset email. Please try again.")
     } finally {
       setIsLoading(false)
     }
@@ -100,13 +113,9 @@ const ForgotPasswordScreen = () => {
 
     setIsLoading(true)
     try {
-      await new Promise((resolve) => setTimeout(resolve, 1500))
-
-      if (code === "123456" || code.length === 6) {
-        setStep(3)
-      } else {
-        Alert.alert("Invalid Code", "The verification code is incorrect. Please try again.")
-      }
+      // For now, just move to the next step when code is entered
+      // In production, you might want to verify the code with the backend
+      setStep(3)
     } catch (error) {
       Alert.alert("Error", "Failed to verify code. Please try again.")
     } finally {
@@ -119,7 +128,21 @@ const ForgotPasswordScreen = () => {
 
     setIsLoading(true)
     try {
-      await new Promise((resolve) => setTimeout(resolve, 2000))
+      const response = await fetch("https://knust-chat-bot-backend.onrender.com/reset-password", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          oobCode: code,
+          newPassword: newPassword,
+        }),
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}))
+        throw new Error(errorData.error || "Failed to reset password")
+      }
 
       Alert.alert(
         "Password Reset Successful",
@@ -131,8 +154,8 @@ const ForgotPasswordScreen = () => {
           },
         ],
       )
-    } catch (error) {
-      Alert.alert("Error", "Failed to reset password. Please try again.")
+    } catch (error: any) {
+      Alert.alert("Error", error.message || "Failed to reset password. Please try again.")
     } finally {
       setIsLoading(false)
     }

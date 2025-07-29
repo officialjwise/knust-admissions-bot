@@ -1,20 +1,20 @@
-import { useState, useEffect } from "react"
-import {
-  View,
-  Text,
-  StyleSheet,
-  TextInput,
-  TouchableOpacity,
-  SafeAreaView,
-  StatusBar,
-  Alert,
-  KeyboardAvoidingView,
-  Platform,
-  ScrollView,
-} from "react-native"
+import { MaterialIcons } from "@expo/vector-icons"
 import AsyncStorage from "@react-native-async-storage/async-storage"
 import { useNavigation } from "@react-navigation/native"
-import { MaterialIcons } from "@expo/vector-icons"
+import { useEffect, useState } from "react"
+import {
+    Alert,
+    KeyboardAvoidingView,
+    Platform,
+    SafeAreaView,
+    ScrollView,
+    StatusBar,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
+} from "react-native"
 
 const EditProfileScreen = () => {
   const [formData, setFormData] = useState({
@@ -57,7 +57,7 @@ const EditProfileScreen = () => {
           lastName: "Doe",
           email: email || "demo@knust.edu.gh",
           phone: "+233 24 123 4567",
-          studentId: "KN2024001",
+          studentId: "KN2025001",
           program: "BSc Computer Science",
           level: "100",
           dateOfBirth: "1999-05-15",

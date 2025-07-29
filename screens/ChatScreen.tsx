@@ -1,18 +1,19 @@
-import { useState, useRef, useEffect } from "react"
-import {
-  View,
-  Text,
-  StyleSheet,
-  TextInput,
-  TouchableOpacity,
-  ScrollView,
-  SafeAreaView,
-  StatusBar,
-  KeyboardAvoidingView,
-  Platform,
-} from "react-native"
 import { MaterialIcons } from "@expo/vector-icons"
 import * as SecureStore from "expo-secure-store"
+import { useEffect, useRef, useState } from "react"
+import {
+    KeyboardAvoidingView,
+    Platform,
+    SafeAreaView,
+    ScrollView,
+    StatusBar,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
+} from "react-native"
+import { MarkdownText } from "../components/MarkdownText"
 
 import type { StackNavigationProp } from "@react-navigation/stack"
 
@@ -64,16 +65,16 @@ const ChatScreen = ({ navigation }: ChatScreenProps) => {
 
     const token = await SecureStore.getItemAsync("idToken")
     if (!token) {
-      setMessages((prev) => [
-        ...prev,
-        {
-          id: Date.now().toString(),
-          text: "Authentication error: No token found. Please log in again.",
-          sender: "bot",
-          timestamp: new Date(),
-        },
-      ])
-      setIsTyping(false)
+      // Clear all stored tokens and navigate to login
+      await SecureStore.deleteItemAsync("idToken").catch(() => {})
+      await SecureStore.deleteItemAsync("refreshToken").catch(() => {})
+      await SecureStore.deleteItemAsync("userEmail").catch(() => {})
+      await SecureStore.deleteItemAsync("userUid").catch(() => {})
+      
+      navigation.reset({
+        index: 0,
+        routes: [{ name: 'SignIn' }]
+      })
       return
     }
 
@@ -105,8 +106,18 @@ const ChatScreen = ({ navigation }: ChatScreenProps) => {
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}))
-        if (response.status === 403) {
-          throw new Error("Access denied: Invalid or insufficient token permissions.")
+        if (response.status === 401 || response.status === 403) {
+          // Token expired or invalid, clear storage and redirect to login
+          await SecureStore.deleteItemAsync("idToken").catch(() => {})
+          await SecureStore.deleteItemAsync("refreshToken").catch(() => {})
+          await SecureStore.deleteItemAsync("userEmail").catch(() => {})
+          await SecureStore.deleteItemAsync("userUid").catch(() => {})
+          
+          navigation.reset({
+            index: 0,
+            routes: [{ name: 'SignIn' }]
+          })
+          return
         }
         throw new Error(errorData.error || `HTTP error! status: ${response.status}`)
       }
@@ -163,9 +174,15 @@ const ChatScreen = ({ navigation }: ChatScreenProps) => {
           </View>
         )}
         <View style={[styles.messageBubble, isUser ? styles.userBubble : styles.botBubble]}>
-          <Text style={[styles.messageText, isUser ? styles.userMessageText : styles.botMessageText]}>
-            {message.text}
-          </Text>
+          {isUser ? (
+            <Text style={[styles.messageText, styles.userMessageText]}>
+              {message.text}
+            </Text>
+          ) : (
+            <MarkdownText style={[styles.messageText, styles.botMessageText]}>
+              {message.text}
+            </MarkdownText>
+          )}
           <View style={styles.messageFooter}>
             <Text style={[styles.messageTime, isUser ? styles.userMessageTime : styles.botMessageTime]}>
               {formatTime(message.timestamp)}
